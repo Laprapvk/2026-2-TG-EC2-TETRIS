@@ -1,3 +1,4 @@
+using System;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
@@ -9,15 +10,6 @@ using Tetris2D.UI;
 
 namespace Tetris2D
 {
-    /// <summary>
-    /// Ventana principal del juego (hereda de GameWindow de OpenTK).
-    ///
-    /// Responsabilidades:
-    ///  - Crear las herramientas de dibujo (shaders, dibujador y texto) una vez.
-    ///  - Mantener la camara ortografica en pixeles del framebuffer.
-    ///  - Repartir los eventos (mouse, teclado y texto) hacia la pantalla activa.
-    ///  - Al cambiar de pantalla, solo se sustituye _pantalla.
-    /// </summary>
     public class TetrisGame : GameWindow
     {
         private GestorShader _shaders = null!;
@@ -34,29 +26,31 @@ namespace Tetris2D
         {
             base.OnLoad();
 
-            // Transparencias (los bordes suavizados del texto necesitan blending).
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
-            // Se crean las herramientas de dibujo una sola vez y se comparten
-            // entre todas las pantallas.
             _shaders = new GestorShader();
             _cuadros = new DibujadorCuadros(_shaders);
             _texto = new RenderizadorTexto(_shaders, new GeneradorFuenteAtlas("Arial Black", 48f, true));
 
-            // Pantalla inicial: la bienvenida arcade.
+            // Pantalla inicial: la bienvenida arcade
             _pantalla = new PantallaBienvenida(_shaders, _cuadros, _texto);
             _pantalla.Cargar();
 
-            // FASE 2: aqui se conecta el cambio hacia el tablero. Ejemplo:
-            // _pantalla.JugarSolicitado += nombre => CambiarPantalla(new PantallaJuego(...));
+            // Suscribimos el evento de la pantalla de bienvenida: cuando el jugador
+            // presiona INICIAR, se lanza JugarSolicitado con su nombre y aquí se
+            // sustituye la pantalla por la de juego (el tablero de Tetris).
+            _pantalla.JugarSolicitado += nombre =>
+                CambiarPantalla(new PantallaJuego(_shaders, _cuadros, _texto, nombre));
         }
 
-        /// <summary>
-        /// Cada vez que cambia el tamaño de la ventana ajustamos el viewport de
-        /// OpenGL para que coincida con el framebuffer real (importante en
-        /// pantallas con alta densidad de pixeles / HiDPI).
-        /// </summary>
+        // Paso 24: Implementar cambio de pantalla
+        private void CambiarPantalla(Pantalla nueva)
+        {
+            _pantalla = nueva;
+            _pantalla.Cargar();
+        }
+
         protected override void OnResize(ResizeEventArgs e)
         {
             base.OnResize(e);
@@ -76,9 +70,6 @@ namespace Tetris2D
             GL.ClearColor(TemaArcade.Fondo.X, TemaArcade.Fondo.Y, TemaArcade.Fondo.Z, TemaArcade.Fondo.W);
             GL.Clear(ClearBufferMask.ColorBufferBit);
 
-            // Camara ortografica: 1 unidad = 1 pixel del framebuffer, con el eje
-            // Y hacia abajo (así coincide con las coordenadas del mouse). Ambas
-            // pantallas (solidos y texto) usan esta misma proyeccion.
             Matrix4 proyeccion = Matrix4.CreateOrthographicOffCenter(
                 0, FramebufferSize.X, FramebufferSize.Y, 0, -1, 1);
 
@@ -111,11 +102,6 @@ namespace Tetris2D
             _pantalla.AlTecla(e.Key);
         }
 
-        /// <summary>
-        /// Convierte la posicion del mouse (relativa al contenido de la ventana)
-        /// al espacio en pixeles del framebuffer. Con HiDPI ambos espacios
-        /// pueden diferir, asi que se aplica la proporcion framebuffer/ventana.
-        /// </summary>
         private Vector2 PuntoRaton()
         {
             float sx = Size.X > 0 ? FramebufferSize.X / (float)Size.X : 1f;
